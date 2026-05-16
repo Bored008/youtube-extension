@@ -1,13 +1,116 @@
+import { useEffect, useState } from "react";
+
+useEffect(() => {
+
+  chrome.tabs.query(
+    {
+      active: true,
+      currentWindow: true
+    },
+
+    (tabs) => {
+
+      const currentUrl = tabs[0]?.url;
+
+      if (
+        currentUrl &&
+        currentUrl.includes("youtube.com/watch")
+      ) {
+
+        setVideoUrl(currentUrl);
+
+      }
+
+    }
+  );
+
+}, []);
+
 function App() {
+
+  const [videoUrl, setVideoUrl] = useState("");
+  const [quality, setQuality] = useState("720");
+
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
+
+  const [status, setStatus] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleDownload = async () => {
+    if(!videoUrl){
+      setStatus("please enter video URL");
+      return;
+    }
+    try {
+      setStatus(true);
+
+      setStatus("Downloading...");
+
+      const response = await fetch(
+        "http://localhost:5000/download",
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type": "application/json",
+          },
+
+          body: JSON.stringify({
+            url: videoUrl,
+            quality,
+            startTime,
+            endTime,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (data.success) {
+
+  setStatus("Download completed");
+
+  console.log("Downloaded File:", data.file);
+  setLoading(false);
+
+}
+else {
+
+  setStatus("Download failed");
+
+}
+
+    }
+    catch (error) {
+
+      console.log(error);
+
+      setStatus("Something went wrong");
+
+      setLoading(false);
+
+    }
+
+  };
+
+
+
   return (
+
     <div className="w-[350px] min-h-[500px] bg-gray-900 text-white p-4">
+
       <h1 className="text-2xl font-bold text-center mb-5">
         YouTube Downloader
       </h1>
 
+
+
       <input
         type="text"
         placeholder="Paste YouTube URL"
+        value={videoUrl}
+        onChange={(e) => setVideoUrl(e.target.value)}
         className="
           w-full
           p-3
@@ -18,7 +121,11 @@ function App() {
         "
       />
 
+
+
       <select
+        value={quality}
+        onChange={(e) => setQuality(e.target.value)}
         className="
           w-full
           p-3
@@ -28,15 +135,18 @@ function App() {
           outline-none
         "
       >
-        <option>Highest</option>
-        <option>1080p</option>
-        <option>720p</option>
-        <option>480p</option>
+        <option value="1080">1080p</option>
+        <option value="720">720p</option>
+        <option value="480">480p</option>
       </select>
 
+
+
       <input
         type="text"
-        placeholder="Start Time (00:01:00)"
+        placeholder="Start Time (00:00:10)"
+        value={startTime}
+        onChange={(e) => setStartTime(e.target.value)}
         className="
           w-full
           p-3
@@ -47,9 +157,13 @@ function App() {
         "
       />
 
+
+
       <input
         type="text"
-        placeholder="End Time (00:05:00)"
+        placeholder="End Time (00:00:20)"
+        value={endTime}
+        onChange={(e) => setEndTime(e.target.value)}
         className="
           w-full
           p-3
@@ -60,19 +174,11 @@ function App() {
         "
       />
 
-      <div className="space-y-2 mb-4">
-        <label className="flex items-center gap-2">
-          <input type="radio" name="playlist" defaultChecked />
-          Separate Playlist Videos
-        </label>
 
-        <label className="flex items-center gap-2">
-          <input type="radio" name="playlist" />
-          Merge Playlist Videos
-        </label>
-      </div>
 
       <button
+  disabled={loading}
+        onClick={handleDownload}
         className="
           w-full
           bg-blue-600
@@ -83,10 +189,19 @@ function App() {
           font-semibold
         "
       >
-        Download
+        {loading ? "Downloading..." : "Download"}
       </button>
+
+
+
+      <p className="text-center mt-4 text-sm text-green-400"></p><p className="text-center mt-4">
+        {status}
+      </p>
+
     </div>
+
   );
+
 }
 
 export default App;

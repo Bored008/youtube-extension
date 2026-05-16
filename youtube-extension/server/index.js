@@ -1,3 +1,15 @@
+process.on("uncaughtException", (err) => {
+  console.error("UNCAUGHT EXCEPTION:");
+  console.error(err);
+  // Don't exit, keep server running
+});
+
+process.on("unhandledRejection", (err) => {
+  console.error("UNHANDLED REJECTION:");
+  console.error(err);
+  // Don't exit, keep server running
+});
+
 const express = require("express");
 const cors = require("cors");
 const ytDlp = require("yt-dlp-exec")
@@ -9,6 +21,13 @@ const fs = require("fs");
 
 const app = express();
 
+// Ensure downloads directory exists
+const downloadsDir = path.join(__dirname, "downloads");
+if (!fs.existsSync(downloadsDir)) {
+  fs.mkdirSync(downloadsDir, { recursive: true });
+  console.log("Created downloads directory:", downloadsDir);
+}
+
 app.use(cors());
 app.use(express.json());
 
@@ -19,6 +38,9 @@ app.get("/", (req, res) => {
 //download api
 app.post("/download", async (req, res) => {
   try {
+    console.log("=================================");
+console.log("New download request received");
+console.log(req.body);
     const {
   url,
   quality,
@@ -29,6 +51,7 @@ app.post("/download", async (req, res) => {
     const tempTemplate = path.join(downloadsDir, "temp.%(ext)s");
 
     const trimmedPath = path.join(downloadsDir, `trimmed-${Date.now()}.mp4`);
+    let finalVideoPath = "";
 
     let format = "best";
 
@@ -42,6 +65,8 @@ app.post("/download", async (req, res) => {
       format = "bestvideo[height<=480]+bestaudio/best"
     }
 
+console.log("Starting yt-dlp download...");
+
     await ytDlp(url, {
   output: tempTemplate,
   format: format,
@@ -49,10 +74,19 @@ app.post("/download", async (req, res) => {
   ffmpegLocation: ffmpegPath,
 });
 
+console.log("yt-dlp download completed");
+
     // locate the actual downloaded temp file (yt-dlp replaces %(ext)s)
-    const downloadedFiles = fs.readdirSync(downloadsDir);
-    const tempFile = downloadedFiles.find((f) => f.startsWith("temp."));
-    if (!tempFile) throw new Error("Downloaded temp file not found");
+    let tempFile;
+    try {
+      const downloadedFiles = fs.readdirSync(downloadsDir);
+      const tempFiles = downloadedFiles.filter((f) => f.startsWith("temp."));
+      if (tempFiles.length === 0) throw new Error("Downloaded temp file not found");
+      // Use the most recently created temp file
+      tempFile = tempFiles.sort().pop();
+    } catch (err) {
+      throw new Error("Failed to find temp file: " + err.message);
+    }
     const tempPath = path.join(downloadsDir, tempFile);
 
     if (startTime && endTime) {
@@ -83,6 +117,7 @@ app.post("/download", async (req, res) => {
           .on("end", () => {
             console.log("Trimming finished");
             try { fs.unlinkSync(tempPath); } catch (e) { console.warn(e.message); }
+            finalVideoPath = trimmedPath;
             resolve();
           })
           .on("error", (err) => {
@@ -91,18 +126,35 @@ app.post("/download", async (req, res) => {
           })
           .run();
       });
-    }
+    }else {
 
-    res.json({
-      success: true,
-      message: "video downloaded successfully",
-    });
+  const finalPath = path.join(
+    downloadsDir,
+    `video-${Date.now()}.mp4`
+  );
+
+  fs.renameSync(tempPath, finalPath);
+
+  finalVideoPath = finalPath;
+
+}
+
+if (!fs.existsSync(finalVideoPath)) {
+  throw new Error("Final video file not found");
+}
+
+   res.json({
+  success: true,
+  file: finalVideoPath
+});
   } catch (error) {
-    console.log(error);
-
-    res.status(500).json({
-      error: "Download failed",
-    });
+    console.error("Download error:", error.message);
+    if (!res.headersSent) {
+      res.status(500).json({
+        error: "Download failed",
+        details: error.message,
+      });
+    }
   }
 });
 
