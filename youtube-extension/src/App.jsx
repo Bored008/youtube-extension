@@ -1,30 +1,5 @@
+/* global chrome */
 import { useEffect, useState } from "react";
-
-useEffect(() => {
-
-  chrome.tabs.query(
-    {
-      active: true,
-      currentWindow: true
-    },
-
-    (tabs) => {
-
-      const currentUrl = tabs[0]?.url;
-
-      if (
-        currentUrl &&
-        currentUrl.includes("youtube.com/watch")
-      ) {
-
-        setVideoUrl(currentUrl);
-
-      }
-
-    }
-  );
-
-}, []);
 
 function App() {
 
@@ -37,14 +12,46 @@ function App() {
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+
+    if (
+      typeof chrome !== "undefined" &&
+      chrome.tabs
+    ) {
+
+      chrome.tabs.query(
+        {
+          active: true,
+          currentWindow: true
+        },
+
+        (tabs) => {
+
+          const currentUrl = tabs[0]?.url;
+
+          if (
+            currentUrl &&
+            currentUrl.includes("youtube.com/watch")
+          ) {
+
+            setVideoUrl(currentUrl);
+
+          }
+
+        }
+      );
+
+    }
+
+  }, []);
+
   const handleDownload = async () => {
     if(!videoUrl){
       setStatus("please enter video URL");
       return;
     }
     try {
-      setStatus(true);
-
+      setLoading(true);
       setStatus("Downloading...");
 
       const response = await fetch(
@@ -72,7 +79,6 @@ function App() {
   setStatus("Download completed");
 
   console.log("Downloaded File:", data.file);
-  setLoading(false);
 
 }
 else {
@@ -88,8 +94,9 @@ else {
 
       setStatus("Something went wrong");
 
+    }
+    finally {
       setLoading(false);
-
     }
 
   };
